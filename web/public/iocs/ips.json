@@ -1,0 +1,8 @@
+[
+  {
+    "value": "50.16.16.211",
+    "type": "ip",
+    "source": "FeodoTracker",
+    "threat_type": "botnet_c2"
+  }
+]
