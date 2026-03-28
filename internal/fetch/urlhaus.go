@@ -2,26 +2,27 @@ package fetch
 
 import (
 	"encoding/json"
-	"net/http"
 	"sort"
 	"time"
 
 	"ioc-pipeline/internal/model"
 )
 
+var urlhausEndpoint = "https://urlhaus.abuse.ch/downloads/json_recent/"
+
 func URLhaus() ([]model.IOC, error) {
-	resp, err := http.Get("https://urlhaus.abuse.ch/downloads/json_recent/")
+	body, err := getWithRetry(urlhausEndpoint)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer body.Close()
 
 	var data map[string][]struct {
 		URL       string `json:"url"`
 		Threat    string `json:"threat"`
 		DateAdded string `json:"dateadded"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+	if err := json.NewDecoder(body).Decode(&data); err != nil {
 		return nil, err
 	}
 

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"ioc-pipeline/internal/dedup"
@@ -16,6 +17,8 @@ import (
 
 func main() {
 	fmt.Println("Starting IoC collection...")
+
+	previous, _ := loadPreviousLatest("data/processed/latest.json")
 
 	urls, err := fetch.URLhaus()
 	if err != nil {
@@ -76,6 +79,20 @@ func main() {
 	}
 	if err := writeJSON("web/public/iocs/latest.json", latestPayload); err != nil {
 		log.Fatalf("Failed writing web latest.json: %v", err)
+	}
+
+	deltaPayload := buildDeltaPayload(timestamp, previous, all)
+	if err := writeJSON("data/processed/new_since_last.json", deltaPayload["new_since_last"]); err != nil {
+		log.Fatalf("Failed writing new_since_last.json: %v", err)
+	}
+	if err := writeJSON("web/public/iocs/new_since_last.json", deltaPayload["new_since_last"]); err != nil {
+		log.Fatalf("Failed writing web new_since_last.json: %v", err)
+	}
+	if err := writeJSON("data/processed/removed_since_last.json", deltaPayload["removed_since_last"]); err != nil {
+		log.Fatalf("Failed writing removed_since_last.json: %v", err)
+	}
+	if err := writeJSON("web/public/iocs/removed_since_last.json", deltaPayload["removed_since_last"]); err != nil {
+		log.Fatalf("Failed writing web removed_since_last.json: %v", err)
 	}
 
 	snapshotName := now.Format("20060102-150405") + ".json"
@@ -163,4 +180,66 @@ func writeJSON(path string, data any) error {
 	}
 	file = append(file, '\n')
 	return os.WriteFile(path, file, 0o644)
+}
+
+func loadPreviousLatest(path string) ([]model.IOC, error) {
+	file, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var payload struct {
+		IOCs []model.IOC `json:"iocs"`
+	}
+	if err := json.Unmarshal(file, &payload); err != nil {
+		return nil, err
+	}
+	return payload.IOCs, nil
+}
+
+func buildDeltaPayload(generatedAt string, previous, current []model.IOC) map[string]map[string]any {
+	prevMap := toIOCMap(previous)
+	currMap := toIOCMap(current)
+
+	newIOCs := make([]model.IOC, 0)
+	removedIOCs := make([]model.IOC, 0)
+
+	for key, ioc := range currMap {
+		if _, ok := prevMap[key]; !ok {
+			newIOCs = append(newIOCs, ioc)
+		}
+	}
+	for key, ioc := range prevMap {
+		if _, ok := currMap[key]; !ok {
+			removedIOCs = append(removedIOCs, ioc)
+		}
+	}
+
+	sort.Slice(newIOCs, func(i, j int) bool { return iocSortKey(newIOCs[i]) < iocSortKey(newIOCs[j]) })
+	sort.Slice(removedIOCs, func(i, j int) bool { return iocSortKey(removedIOCs[i]) < iocSortKey(removedIOCs[j]) })
+
+	return map[string]map[string]any{
+		"new_since_last": {
+			"generated_at": generatedAt,
+			"total":        len(newIOCs),
+			"iocs":         newIOCs,
+		},
+		"removed_since_last": {
+			"generated_at": generatedAt,
+			"total":        len(removedIOCs),
+			"iocs":         removedIOCs,
+		},
+	}
+}
+
+func toIOCMap(iocs []model.IOC) map[string]model.IOC {
+	out := make(map[string]model.IOC, len(iocs))
+	for _, ioc := range iocs {
+		key := strings.ToLower(ioc.Type) + "|" + strings.ToLower(strings.TrimSpace(ioc.Value))
+		out[key] = ioc
+	}
+	return out
+}
+
+func iocSortKey(ioc model.IOC) string {
+	return strings.ToLower(ioc.Type) + "|" + strings.ToLower(ioc.Value)
 }

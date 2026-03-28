@@ -2,12 +2,13 @@ package fetch
 
 import (
 	"bufio"
-	"net/http"
 	"net/url"
 	"strings"
 
 	"ioc-pipeline/internal/model"
 )
+
+var feodoEndpoint = "https://feodotracker.abuse.ch/downloads/ipblocklist_recommended.txt"
 
 func DomainFromURLs(urlIOCs []model.IOC) []model.IOC {
 	domains := make([]model.IOC, 0, len(urlIOCs))
@@ -31,14 +32,14 @@ func DomainFromURLs(urlIOCs []model.IOC) []model.IOC {
 }
 
 func FeodoTrackerIPs() ([]model.IOC, error) {
-	resp, err := http.Get("https://feodotracker.abuse.ch/downloads/ipblocklist_recommended.txt")
+	body, err := getWithRetry(feodoEndpoint)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer body.Close()
 
 	ips := make([]model.IOC, 0, 5000)
-	scanner := bufio.NewScanner(resp.Body)
+	scanner := bufio.NewScanner(body)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
