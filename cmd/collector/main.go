@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"ioc-pipeline/internal/dedup"
+	"ioc-pipeline/internal/enrich"
 	"ioc-pipeline/internal/fetch"
 	"ioc-pipeline/internal/model"
 )
@@ -30,6 +31,16 @@ func main() {
 	all := append(urls, ips...)
 	all = append(all, domains...)
 	all = dedup.Process(all)
+
+	now := time.Now().UTC()
+	tsRun := now.Format(time.RFC3339)
+	for i := range all {
+		all[i].LastSeen = tsRun
+	}
+
+	encCfg := enrich.FromEnv()
+	fmt.Println(enrich.Summary(encCfg))
+	enrich.Apply(all, encCfg)
 
 	grouped := map[string][]model.IOC{
 		"urls":    {},
@@ -64,7 +75,6 @@ func main() {
 		log.Fatalf("Failed creating web history dir: %v", err)
 	}
 
-	now := time.Now().UTC()
 	timestamp := now.Format(time.RFC3339)
 	latestPayload := map[string]any{
 		"generated_at": timestamp,

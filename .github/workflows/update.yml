@@ -15,6 +15,13 @@ jobs:
           go-version-file: go.mod
 
       - name: Run Collector
+        env:
+          VT_API_KEY: ${{ secrets.VT_API_KEY }}
+          OTX_API_KEY: ${{ secrets.OTX_API_KEY }}
+          # VT free tier: 4 lookups/min — keep VT_MIN_INTERVAL_MS >= 15000
+          VT_MIN_INTERVAL_MS: "16000"
+          ENRICH_MAX: "10"
+          ENRICH_SLEEP_MS: "2000"
         run: go run ./cmd/collector/main.go
 
       - name: Commit updated IoCs
